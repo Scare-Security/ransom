@@ -3,8 +3,6 @@ per file:
 key = aes(master, sha(filename & filesize))
 
 different key per file using their initial filename and filesize
-
-improv: could write the filename+size into the outfile
 ]#
 
 import std/[os, net, strformat, strutils, sha1, sysrand]
