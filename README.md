@@ -1,5 +1,6 @@
 # ransom
-Basic Ransomware in Nim
+Basic Ransomware in Nim  
+> For learning purpose only
 
 # usage
 ```
