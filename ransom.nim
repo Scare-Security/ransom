@@ -60,6 +60,7 @@ proc sendKeyIv(host: (string, Port), key: seq[byte]) =
   var server = newSocket()
   connect(server, host[0], host[1])
   send(server, toHex(key) & "\n")
+  close(server)
 
 proc main() =
   if(paramCount() < 3):
