@@ -17,7 +17,7 @@ KDF(masterKey, filename, filesize) = AES(masterkey, SHA(filename & $(filesize))
 
 # TODO
 - [X] use thread depending on the size of the file
-- [ ] improve speed using buffer (read file)
+- [ ] encrypting only the first 10mb of each files
 - [ ] send the key to the server via DNS
 - [ ] encrypt the key before sending to the server
 - [ ] add the filename + size in the file just in case
